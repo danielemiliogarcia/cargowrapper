@@ -338,6 +338,8 @@ fn main() {
         }
     }
 
+    // `install` stays here: on Cargo 1.100+ `--locked` is a no-op for it, but on
+    // older Cargo it is what makes install use the packaged Cargo.lock.
     let locked_commands = [
         "build", "test", "run", "check", "bench", "clippy", "doc", "rustc", "rustdoc", "install",
     ];

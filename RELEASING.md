@@ -16,8 +16,8 @@ Releases use checksum-pinned `cargo-dist` 0.32.0 and GitHub Actions. A `vMAJOR.M
 ```sh
 ./scripts/install-pinned-dist.sh
 dist --version
-dist plan --tag=v0.2.2
-dist build --artifacts=local --target=x86_64-unknown-linux-gnu --tag=v0.2.2
+dist plan --tag=v0.2.3
+dist build --artifacts=local --target=x86_64-unknown-linux-gnu --tag=v0.2.3
 ```
 
 Use the version from `Cargo.toml`. Add `--allow-dirty` only for a private smoke test. Artifacts appear in `target/distrib/`.
@@ -38,9 +38,9 @@ Make the version bump part of the pull request that is squash-merged, so the def
 cargo test --all-targets --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --all --check
-dist plan --tag=v0.2.2
-git tag -a v0.2.2 -m "Cargo Wrapper 0.2.2"
-git push origin v0.2.2
+dist plan --tag=v0.2.3
+git tag -a v0.2.3 -m "Cargo Wrapper 0.2.3"
+git push origin v0.2.3
 ```
 
 The workflow publishes only matching version tags. Any verification, build, packaging or attestation failure prevents publication.

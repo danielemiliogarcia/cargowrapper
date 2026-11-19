@@ -137,6 +137,54 @@ Expected output:
 Cargo wrapper is active.
 ```
 
+## Install a precompiled release
+
+Each release publishes native archives for Linux (x86_64 and arm64), macOS (Apple Silicon and Intel) and Windows (x86_64), with a SHA-256 checksum file per archive and GitHub build provenance. You need the [GitHub CLI](https://cli.github.com/) (`gh`) to verify provenance.
+
+### Linux and macOS
+
+```sh
+tag=v0.2.2                         # use the latest release tag
+target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, aarch64-apple-darwin, x86_64-apple-darwin
+repo=danielemiliogarcia/cargowrapper
+archive="cargowrapper-$target.tar.xz"
+
+gh release download "$tag" --repo "$repo" --pattern "$archive" --pattern "$archive.sha256"
+echo "$(cut -d ' ' -f 1 "$archive.sha256")  $archive" | shasum -a 256 -c -
+gh attestation verify "$archive" --repo "$repo" \
+  --signer-workflow "$repo/.github/workflows/release.yml" \
+  --source-ref "refs/tags/$tag" --deny-self-hosted-runners
+
+tar -xJf "$archive"
+mkdir -p "$HOME/.local/bin"
+install -m 755 "cargowrapper-$target/cargowrapper" "$HOME/.local/bin/cargo"
+```
+
+Make sure `$HOME/.local/bin` comes before `$HOME/.cargo/bin` on your `PATH`, then verify with `which cargo` and `cargo wrapper`. Do not install the wrapper in `$HOME/.cargo/bin`; it needs the real Cargo executable there for forwarding.
+
+### Windows
+
+```powershell
+$tag = "v0.2.2"                    # use the latest release tag
+$repo = "danielemiliogarcia/cargowrapper"
+$archive = "cargowrapper-x86_64-pc-windows-msvc.zip"
+
+gh release download $tag --repo $repo --pattern $archive --pattern "$archive.sha256"
+$expected = ((Get-Content "$archive.sha256" -TotalCount 1) -split ' ')[0]
+if ((Get-FileHash -Algorithm SHA256 $archive).Hash -ne $expected) { throw "checksum mismatch" }
+gh attestation verify $archive --repo $repo `
+  --signer-workflow "$repo/.github/workflows/release.yml" `
+  --source-ref "refs/tags/$tag" --deny-self-hosted-runners
+
+Expand-Archive $archive -DestinationPath extracted -Force
+New-Item -ItemType Directory -Force C:\bin | Out-Null
+Copy-Item (Get-ChildItem extracted -Recurse -Filter cargowrapper.exe).FullName C:\bin\cargo.exe
+```
+
+Then add `C:\bin` to the front of your user `PATH` as described under Manual installation.
+
+Checksums detect corruption, and attestations identify the repository and workflow that produced a file. Neither proves that the code is safe.
+
 ## Plugins
 
 Cargo Wrapper can run locally installed native executables around ordinary Cargo calls. The core does not download plugins: obtain and verify a precompiled plugin binary yourself, then provide its local path. Installation copies the file into a private user directory and leaves it disabled.

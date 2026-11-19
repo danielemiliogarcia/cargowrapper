@@ -8,6 +8,8 @@ The wrapper forwards commands to the real Cargo executable in `$CARGO_HOME/bin`,
 - macOS: `$HOME/.cargo/bin/cargo`
 - Windows: `%USERPROFILE%\.cargo\bin\cargo.exe`
 
+New here? [TRY-IT.md](TRY-IT.md) is a hands-on walkthrough that tries the wrapper, the Supply Chain Guard plugin and minimum publish age without installing anything.
+
 ## Behavior
 
 - Adds `--locked` to these commands when it is not already present:

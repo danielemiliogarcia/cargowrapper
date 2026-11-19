@@ -1,0 +1,109 @@
+# Checks a published release the way a user would: download, checksum, build provenance, run.
+# It is a separate workflow so regenerating release.yml with cargo-dist never removes it.
+# It runs after the Release workflow succeeds. A failure cannot un-publish the release; it tells
+# the maintainer quickly that a published archive is broken, mismatched, or missing.
+
+name: Verify published release
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  verify-published:
+    name: Verify published ${{ matrix.target }}
+    # Only tag-triggered Release runs that succeeded.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            windows: false
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            windows: false
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            windows: false
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            windows: false
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            windows: true
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      attestations: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - name: Download, verify, and run the published archive (Linux and macOS)
+        if: ${{ !matrix.windows }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/verify-published"
+          mkdir -p "$work"
+          cd "$work"
+          archive="cargowrapper-${{ matrix.target }}.tar.xz"
+
+          gh release download "$TAG" --repo "$REPO" \
+            --pattern "$archive" --pattern "$archive.sha256"
+
+          expected="$(head -n 1 "$archive.sha256" | cut -d ' ' -f 1)"
+          if command -v sha256sum >/dev/null 2>&1; then
+            actual="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          else
+            actual="$(shasum -a 256 "$archive" | cut -d ' ' -f 1)"
+          fi
+          test -n "$expected"
+          test "$expected" = "$actual"
+
+          gh attestation verify "$archive" \
+            --repo "$REPO" \
+            --signer-workflow "$REPO/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$TAG" \
+            --deny-self-hosted-runners
+
+          tar -xJf "$archive"
+          binary="$(find . -type f -name cargowrapper -print -quit)"
+          test -n "$binary"
+          test "$("$binary" wrapper)" = "Cargo wrapper is active."
+      - name: Download, verify, and run the published archive (Windows)
+        if: ${{ matrix.windows }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $work = Join-Path $env:RUNNER_TEMP "verify-published"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          Set-Location $work
+          $archive = "cargowrapper-${{ matrix.target }}.zip"
+
+          & gh release download $env:TAG --repo $env:REPO --pattern $archive --pattern "$archive.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "release download failed" }
+
+          $expected = ((Get-Content "$archive.sha256" -TotalCount 1) -split ' ')[0].ToLowerInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if (-not $expected -or $expected -ne $actual) { throw "archive checksum mismatch" }
+
+          & gh attestation verify $archive `
+            --repo $env:REPO `
+            --signer-workflow "$env:REPO/.github/workflows/release.yml" `
+            --source-ref "refs/tags/$env:TAG" `
+            --deny-self-hosted-runners
+          if ($LASTEXITCODE -ne 0) { throw "attestation verification failed" }
+
+          Expand-Archive -Path $archive -DestinationPath extracted -Force
+          $binary = Get-ChildItem -Path extracted -Filter "cargowrapper.exe" -Recurse | Select-Object -First 1
+          if ($null -eq $binary) { throw "cargowrapper.exe is missing from the archive" }
+          if ((& $binary.FullName wrapper) -ne "Cargo wrapper is active.") {
+            throw "published binary smoke test failed"
+          }

@@ -20,6 +20,7 @@ The wrapper forwards commands to the real Cargo executable in `$CARGO_HOME/bin`,
   - `doc`
   - `rustc`
   - `rustdoc`
+  - `install` (on Cargo 1.100+ `cargo install` already uses the packaged lockfile and `--locked` does nothing; on older Cargo it makes install use the packaged lockfile)
 - Rejects `cargo update`.
 - Provides `cargo forceupdate` as an explicit way to run `cargo update`.
 - Provides `cargo wrapper` to confirm that the wrapper is active.
@@ -170,6 +171,19 @@ The default user-wide plugin locations are:
 - Windows: `%LOCALAPPDATA%\CargoWrapper\plugins`.
 
 `CARGO_WRAPPER_PLUGIN_DIR` overrides this location for tests and managed deployments. Plugin authors should follow the versioned middleware contract in [PLUGIN-PROTOCOL.md](PLUGIN-PROTOCOL.md).
+
+## Minimum publish age (dependency cooldown)
+
+- **Cargo 1.100 and newer:** minimum publish age is native. Do not install the `age-policy` plugin. Check a `.cargo/config.toml` into the project with `[registry]` / `global-min-publish-age = "30 days"`, and also set the user or organization environment variable `CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE="30 days"` (it covers every repository and `cargo install`). The `supply-chain-guard` plugin resolves candidates in an isolated Cargo home, so it sees the environment variable and the project's own `.cargo/config.toml`, but not `~/.cargo/config.toml`; see the [plugin's README](https://github.com/danielemiliogarcia/cargo-wrapper-supply-chain-guard).
+- **Cargo 1.99 and older:** the native setting is silently ignored, so use the legacy [`age-policy`](https://github.com/danielemiliogarcia/cargo-wrapper-age-policy) plugin (legacy: only for Cargo 1.99 or older) until it reaches end of support on 2027-06-30.
+- Do not rely on minimum publish age for `cargo install`.
+
+The warning shown when `cargo update` is refused refers to this cooldown; use `cargo forceupdate` only after configuring it as described here.
+
+### Known plugins
+
+- `age-policy` (legacy: only for Cargo 1.99 or older): enforces minimum publish age on old Cargo. [Repository](https://github.com/danielemiliogarcia/cargo-wrapper-age-policy).
+- `supply-chain-guard`: reviews the exact dependency artifacts before Cargo uses them. [Repository](https://github.com/danielemiliogarcia/cargo-wrapper-supply-chain-guard).
 
 ## Command logging
 
